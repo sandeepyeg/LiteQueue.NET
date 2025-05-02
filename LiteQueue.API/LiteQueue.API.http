@@ -1,0 +1,6 @@
+@LiteQueue.API_HostAddress = http://localhost:5135
+
+GET {{LiteQueue.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
