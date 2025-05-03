@@ -26,23 +26,32 @@ public class RedisQueueRepository : IQueueRepository
         var json = System.Text.Json.JsonSerializer.Serialize(message);
         await _db.ListLeftPushAsync(queueName, json);
     }
-
     public async Task<IEnumerable<QueueMessageDto>> ReceiveMessagesAsync(string queueName, int maxMessages, TimeSpan visibilityTimeout)
+{
+    var messages = new List<QueueMessageDto>();
+
+    for (int i = 0; i < maxMessages; i++)
     {
-        var messages = new List<QueueMessageDto>();
+        var value = await _db.ListRightPopAsync(RedisKeyBuilder.QueueKey(queueName));
+        if (value.IsNullOrEmpty) break;
 
-        for (int i = 0; i < maxMessages; i++)
+        var msg = JsonSerializer.Deserialize<QueueMessageDto>(value!)!;
+        msg.VisibleUntil = DateTimeOffset.UtcNow.Add(visibilityTimeout);
+        msg.RetryCount += 1;
+
+        if (msg.RetryCount > 5)
         {
-            var value = await _db.ListRightPopAsync(queueName);
-            if (value.IsNullOrEmpty) break;
-
-            var msg = System.Text.Json.JsonSerializer.Deserialize<QueueMessageDto>(value!)!;
-            msg.VisibleUntil = DateTimeOffset.UtcNow.Add(visibilityTimeout);
-            messages.Add(msg);
+            // Dead-letter it
+            await _db.ListLeftPushAsync(RedisKeyBuilder.DeadLetterKey(queueName), JsonSerializer.Serialize(msg));
+            continue;
         }
 
-        return messages;
+        messages.Add(msg);
     }
+
+    return messages;
+}
+
 
     public Task DeleteMessageAsync(string queueName, string messageId)
     {

@@ -13,6 +13,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(
     ConnectionMultiplexer.Connect("localhost:6379"));
 
 builder.Services.AddScoped<IQueueRepository, RedisQueueRepository>();
+builder.Services.AddScoped<QueueService>();
+builder.Services.AddHostedService<MessageCleaner>();
+
 
 var app = builder.Build();
 

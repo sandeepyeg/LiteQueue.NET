@@ -7,4 +7,5 @@ public class QueueMessageDto
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public int RetryCount { get; set; } = 0;
     public DateTimeOffset? VisibleUntil { get; set; }
+	public DateTimeOffset? ExpireAt { get; set; }
 }
