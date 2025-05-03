@@ -13,7 +13,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LiteQueue.Application\LiteQueue.Application.csproj" />
+    <ProjectReference Include="..\LiteQueue.Background\LiteQueue.Background.csproj" />
     <ProjectReference Include="..\LiteQueue.Contracts\LiteQueue.Contracts.csproj" />
+    <ProjectReference Include="..\LiteQueue.Infrastructure\LiteQueue.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

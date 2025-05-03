@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\LiteQueue.Contracts\LiteQueue.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>

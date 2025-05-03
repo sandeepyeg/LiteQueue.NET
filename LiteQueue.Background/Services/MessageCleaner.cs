@@ -1,4 +1,7 @@
-namespace DefaultNamespace;
+using System.Text.Json;
+using LiteQueue.Contracts.Constants.DTOs;
+
+namespace LiteQueue.Background.Services;
 
 public class MessageCleaner : BackgroundService
 {

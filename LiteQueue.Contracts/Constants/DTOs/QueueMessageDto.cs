@@ -1,4 +1,4 @@
-namespace DefaultNamespace;
+namespace LiteQueue.Contracts.Constants.DTOs;
 
 public class QueueMessageDto
 {

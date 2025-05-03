@@ -1,4 +1,8 @@
-namespace DefaultNamespace;
+using LiteQueue.Application.Services;
+using LiteQueue.Contracts.Constants.DTOs;
+using Microsoft.AspNetCore.Mvc;
+
+namespace LiteQueue.API.Controllers;
 
 
 [ApiController]

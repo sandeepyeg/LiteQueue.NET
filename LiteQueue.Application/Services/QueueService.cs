@@ -1,4 +1,7 @@
-namespace DefaultNamespace;
+using LiteQueue.Contracts.Constants.DTOs;
+using LiteQueue.Domain.Interfaces;
+
+namespace LiteQueue.Application.Services;
 
 public class QueueService
 {

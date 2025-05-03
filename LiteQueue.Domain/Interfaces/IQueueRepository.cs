@@ -1,4 +1,6 @@
-namespace DefaultNamespace;
+using LiteQueue.Contracts.Constants.DTOs;
+
+namespace LiteQueue.Domain.Interfaces;
 
 
 public interface IQueueRepository

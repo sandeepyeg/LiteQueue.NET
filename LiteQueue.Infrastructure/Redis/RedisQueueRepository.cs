@@ -1,4 +1,10 @@
-namespace DefaultNamespace;
+using System.Text.Json;
+using LiteQueue.Contracts.Constants.DTOs;
+using LiteQueue.Domain.Interfaces;
+using LiteQueue.Infrastructure.Utils;
+using StackExchange.Redis;
+
+namespace LiteQueue.Infrastructure.Redis;
 
 public class RedisQueueRepository : IQueueRepository
 {

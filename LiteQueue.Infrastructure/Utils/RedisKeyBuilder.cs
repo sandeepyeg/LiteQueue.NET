@@ -1,4 +1,4 @@
-namespace DefaultNamespace;
+namespace LiteQueue.Infrastructure.Utils;
 
 public static class RedisKeyBuilder
 {
