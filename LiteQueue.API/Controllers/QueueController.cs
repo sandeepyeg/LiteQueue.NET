@@ -1,12 +1,11 @@
 using LiteQueue.Application.Services;
-using LiteQueue.Contracts.Constants.DTOs;
+using LiteQueue.Domain.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LiteQueue.API.Controllers;
 
-
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/queues")]
 public class QueueController : ControllerBase
 {
     private readonly QueueService _service;
@@ -15,11 +14,12 @@ public class QueueController : ControllerBase
     {
         _service = service;
     }
+
     [HttpPost("{queueName}")]
-    public async Task<IActionResult> CreateQueue(string queueName)
+    public async Task<IActionResult> CreateQueue([FromRoute] string queueName)
     {
         await _service.CreateQueueAsync(queueName);
-        return Ok($"Queue '{queueName}' created.");
+        return Ok(new { queue = queueName, status = "created" });
     }
 
     [HttpGet]
@@ -30,30 +30,65 @@ public class QueueController : ControllerBase
     }
 
     [HttpPost("{queueName}/messages")]
-    public async Task<IActionResult> SendMessage(string queueName, [FromBody] QueueMessageDto message)
+    public async Task<IActionResult> SendMessage([FromRoute] string queueName, [FromBody] QueueMessage message)
     {
+        message.Id = Guid.NewGuid().ToString();
+        message.CreatedAt = DateTimeOffset.UtcNow;
         await _service.SendMessageAsync(queueName, message);
-        return Ok("Message sent.");
+        return Ok(new { messageId = message.Id });
     }
 
-    [HttpGet("{queueName}/messages")]
-    public async Task<IActionResult> ReceiveMessages(string queueName, [FromQuery] int max = 1, [FromQuery] int timeout = 30)
+    [HttpPost("{queueName}/receive")]
+    public async Task<IActionResult> ReceiveMessages(
+        [FromRoute] string queueName,
+        [FromQuery] int max = 1,
+        [FromQuery] int timeout = 30)
     {
-        var msgs = await _service.ReceiveMessagesAsync(queueName, max, TimeSpan.FromSeconds(timeout));
-        return Ok(msgs);
+        var messages = await _service.ReceiveMessagesAsync(queueName, max, TimeSpan.FromSeconds(timeout));
+        return Ok(messages);
     }
 
-    [HttpDelete("{queueName}/messages/{messageId}")]
-    public async Task<IActionResult> DeleteMessage(string queueName, string messageId)
+    [HttpPost("{queueName}/acknowledge")]
+    public async Task<IActionResult> AcknowledgeMessage(
+        [FromRoute] string queueName,
+        [FromBody] AcknowledgeRequest request)
     {
-        await _service.DeleteMessageAsync(queueName, messageId);
-        return Ok("Message deleted.");
+        await _service.AcknowledgeMessageAsync(queueName, request.ReceiptHandle);
+        return Ok();
+    }
+
+    [HttpPost("{queueName}/reject")]
+    public async Task<IActionResult> RejectMessage(
+        [FromRoute] string queueName,
+        [FromBody] RejectRequest request)
+    {
+        await _service.RejectMessageAsync(queueName, request.ReceiptHandle);
+        return Ok();
     }
 
     [HttpGet("{queueName}/peek")]
-    public async Task<IActionResult> PeekMessage(string queueName)
+    public async Task<IActionResult> PeekMessage([FromRoute] string queueName)
     {
-        var msg = await _service.PeekMessageAsync(queueName);
-        return Ok(msg);
+        var message = await _service.PeekMessageAsync(queueName);
+        return Ok(message);
+    }
+
+    [HttpGet("{queueName}/deadletters")]
+    public async Task<IActionResult> GetDeadLetters([FromRoute] string queueName)
+    {
+        var messages = await _service.GetDeadLetterMessagesAsync(queueName);
+        return Ok(messages);
+    }
+
+    [HttpPost("{queueName}/deadletters/{messageId}/redrive")]
+    public async Task<IActionResult> RedriveDeadLetter(
+        [FromRoute] string queueName,
+        [FromRoute] string messageId)
+    {
+        await _service.RedriveDeadLetterMessageAsync(queueName, messageId);
+        return Ok();
     }
 }
+
+public record AcknowledgeRequest(string ReceiptHandle);
+public record RejectRequest(string ReceiptHandle);

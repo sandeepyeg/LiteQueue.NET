@@ -1,8 +1,9 @@
 using System.Text.Json;
-using LiteQueue.Contracts.Constants.DTOs;
 using LiteQueue.Domain.Interfaces;
 using LiteQueue.Infrastructure.Utils;
 using StackExchange.Redis;
+using QueueMessage = LiteQueue.Domain.Models.QueueMessage;
+using DeadLetterMessage = LiteQueue.Domain.Models.DeadLetterMessage;
 
 namespace LiteQueue.Infrastructure.Redis;
 
@@ -17,57 +18,100 @@ public class RedisQueueRepository : IQueueRepository
 
     public Task CreateQueueAsync(string queueName)
     {
-        // Redis doesn't need to "create" a queue. You can no-op or validate.
-        return Task.CompletedTask;
+        return _db.SetAddAsync(RedisKeyBuilder.QueuesRegistryKey(), queueName);
     }
 
     public async Task<IEnumerable<string>> ListQueuesAsync()
     {
-        // Redis has no native way to list keys unless using scan
-        return Enumerable.Empty<string>(); // Placeholder
+        var values = await _db.SetMembersAsync(RedisKeyBuilder.QueuesRegistryKey());
+        return values.Select(v => v.ToString());
     }
 
-    public async Task SendMessageAsync(string queueName, QueueMessageDto message)
+    public async Task SendMessageAsync(string queueName, QueueMessage message)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(message);
-        await _db.ListLeftPushAsync(queueName, json);
+        await CreateQueueAsync(queueName);
+
+        var json = JsonSerializer.Serialize(message);
+        await _db.StringSetAsync(RedisKeyBuilder.MessageKey(message.Id), json);
+
+        var queueKey = RedisKeyBuilder.QueueReadyKey(queueName);
+        await _db.ListLeftPushAsync(queueKey, message.Id);
     }
-    public async Task<IEnumerable<QueueMessageDto>> ReceiveMessagesAsync(string queueName, int maxMessages, TimeSpan visibilityTimeout)
-{
-    var messages = new List<QueueMessageDto>();
 
-    for (int i = 0; i < maxMessages; i++)
+    public async Task<IEnumerable<QueueMessage>> ReceiveMessagesAsync(string queueName, int maxMessages, TimeSpan visibilityTimeout)
     {
-        var value = await _db.ListRightPopAsync(RedisKeyBuilder.QueueKey(queueName));
-        if (value.IsNullOrEmpty) break;
+        var messages = new List<QueueMessage>();
 
-        var msg = JsonSerializer.Deserialize<QueueMessageDto>(value!)!;
-        msg.VisibleUntil = DateTimeOffset.UtcNow.Add(visibilityTimeout);
-        msg.RetryCount += 1;
-
-        if (msg.RetryCount > 5)
+        for (int i = 0; i < maxMessages; i++)
         {
-            // Dead-letter it
-            await _db.ListLeftPushAsync(RedisKeyBuilder.DeadLetterKey(queueName), JsonSerializer.Serialize(msg));
-            continue;
+            var value = await _db.ListRightPopAsync(RedisKeyBuilder.QueueReadyKey(queueName));
+            if (value.IsNullOrEmpty) break;
+
+            var msg = await _db.StringGetAsync(RedisKeyBuilder.MessageKey(value!));
+            if (msg.IsNullOrEmpty) continue;
+
+            var queueMessage = JsonSerializer.Deserialize<QueueMessage>(msg!.ToString())!;
+            queueMessage.DeliveryCount++;
+            queueMessage.VisibleUntil = DateTimeOffset.UtcNow.Add(visibilityTimeout);
+
+            if (queueMessage.DeliveryCount > 5)
+            {
+                var deadMsg = new DeadLetterMessage
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    OriginalQueueName = queueName,
+                    OriginalMessageId = queueMessage.Id,
+                    Body = queueMessage.Body,
+                    DeliveryAttempts = queueMessage.DeliveryCount,
+                    DeadLetteredAt = DateTimeOffset.UtcNow
+                };
+                await _db.ListLeftPushAsync(RedisKeyBuilder.DeadLetterKey(queueName), JsonSerializer.Serialize(deadMsg));
+                continue;
+            }
+
+            var receiptHandle = Guid.NewGuid().ToString();
+            await _db.SortedSetAddAsync(RedisKeyBuilder.QueueInFlightKey(queueName), value!, DateTimeOffset.UtcNow.Add(visibilityTimeout).ToUnixTimeSeconds());
+            await _db.StringSetAsync(RedisKeyBuilder.ReceiptKey(receiptHandle), JsonSerializer.Serialize(value!));
+            await _db.StringSetAsync(RedisKeyBuilder.MessageKey(queueMessage.Id), JsonSerializer.Serialize(queueMessage));
+
+            messages.Add(queueMessage);
         }
 
-        messages.Add(msg);
+        return messages;
     }
 
-    return messages;
-}
-
-
-    public Task DeleteMessageAsync(string queueName, string messageId)
+    public Task AcknowledgeMessageAsync(string queueName, string receiptHandle)
     {
-        // Messages are already removed on receive — so this can be a no-op unless using visibility queues.
         return Task.CompletedTask;
     }
 
-    public Task<QueueMessageDto?> PeekMessageAsync(string queueName)
+    public Task RejectMessageAsync(string queueName, string receiptHandle)
     {
-        // Redis has no "peek" — you'd have to use ListGetByIndex (index 0 or -1)
-        return Task.FromResult<QueueMessageDto?>(null);
+        return Task.CompletedTask;
+    }
+
+    public async Task<QueueMessage?> PeekMessageAsync(string queueName)
+    {
+        var value = await _db.ListGetByIndexAsync(RedisKeyBuilder.QueueReadyKey(queueName), -1);
+        if (value.IsNullOrEmpty) return null;
+
+        var msg = await _db.StringGetAsync(RedisKeyBuilder.MessageKey(value!));
+        if (msg.IsNullOrEmpty) return null;
+
+        return JsonSerializer.Deserialize<QueueMessage>(msg!.ToString());
+    }
+
+    public async Task<IEnumerable<DeadLetterMessage>> GetDeadLetterMessagesAsync(string queueName)
+    {
+        var values = await _db.ListRangeAsync(RedisKeyBuilder.DeadLetterKey(queueName));
+        return values
+            .Select(v => JsonSerializer.Deserialize<DeadLetterMessage>(v!.ToString()))
+            .Where(m => m != null)
+            .Select(m => m!);
+    }
+
+    public Task RedriveDeadLetterMessageAsync(string queueName, string messageId)
+    {
+        return Task.CompletedTask;
     }
 }

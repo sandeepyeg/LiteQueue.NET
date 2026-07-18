@@ -1,5 +1,5 @@
-using LiteQueue.Contracts.Constants.DTOs;
 using LiteQueue.Domain.Interfaces;
+using LiteQueue.Domain.Models;
 
 namespace LiteQueue.Application.Services;
 
@@ -11,11 +11,28 @@ public class QueueService
     {
         _repository = repository;
     }
+
     public Task CreateQueueAsync(string queueName) => _repository.CreateQueueAsync(queueName);
+
     public Task<IEnumerable<string>> ListQueuesAsync() => _repository.ListQueuesAsync();
-    public Task SendMessageAsync(string queueName, QueueMessageDto message) => _repository.SendMessageAsync(queueName, message);
-    public Task<IEnumerable<QueueMessageDto>> ReceiveMessagesAsync(string queueName, int max, TimeSpan timeout) =>
+
+    public Task SendMessageAsync(string queueName, QueueMessage message) =>
+        _repository.SendMessageAsync(queueName, message);
+
+    public Task<IEnumerable<QueueMessage>> ReceiveMessagesAsync(string queueName, int max, TimeSpan timeout) =>
         _repository.ReceiveMessagesAsync(queueName, max, timeout);
-    public Task DeleteMessageAsync(string queueName, string messageId) => _repository.DeleteMessageAsync(queueName, messageId);
-    public Task<QueueMessageDto?> PeekMessageAsync(string queueName) => _repository.PeekMessageAsync(queueName);
+
+    public Task AcknowledgeMessageAsync(string queueName, string receiptHandle) =>
+        _repository.AcknowledgeMessageAsync(queueName, receiptHandle);
+
+    public Task RejectMessageAsync(string queueName, string receiptHandle) =>
+        _repository.RejectMessageAsync(queueName, receiptHandle);
+
+    public Task<QueueMessage?> PeekMessageAsync(string queueName) => _repository.PeekMessageAsync(queueName);
+
+    public Task<IEnumerable<DeadLetterMessage>> GetDeadLetterMessagesAsync(string queueName) =>
+        _repository.GetDeadLetterMessagesAsync(queueName);
+
+    public Task RedriveDeadLetterMessageAsync(string queueName, string messageId) =>
+        _repository.RedriveDeadLetterMessageAsync(queueName, messageId);
 }

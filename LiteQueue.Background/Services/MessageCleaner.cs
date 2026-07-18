@@ -1,5 +1,6 @@
-using System.Text.Json;
-using LiteQueue.Contracts.Constants.DTOs;
+using LiteQueue.Infrastructure.Utils;
+using Microsoft.Extensions.Hosting;
+using StackExchange.Redis;
 
 namespace LiteQueue.Background.Services;
 
@@ -18,23 +19,25 @@ public class MessageCleaner : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            var keys = server.Keys(pattern: "queue:*").ToArray();
-
-            foreach (var key in keys)
+            try
             {
-                var length = await db.ListLengthAsync(key);
-                for (long i = 0; i < length; i++)
-                {
-                    var item = await db.ListGetByIndexAsync(key, i);
-                    if (!item.HasValue) continue;
+                var server = _redis.GetServer(_redis.GetEndPoints().First());
 
-                    var msg = JsonSerializer.Deserialize<QueueMessageDto>(item!)!;
-                    if (msg.ExpireAt.HasValue && msg.ExpireAt < DateTimeOffset.UtcNow)
+                var inflightKeys = server.Keys(pattern: "litequeue:queue:*:inflight").ToArray();
+                foreach (var key in inflightKeys)
+                {
+                    var expired = await db.SortedSetRangeByScoreAsync(key, double.NegativeInfinity, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                    foreach (var entry in expired)
                     {
-                        await db.ListRemoveAsync(key, item);
+                        await db.SortedSetRemoveAsync(key, entry);
+                        var queueName = key.ToString().Split(':')[2];
+                        await db.ListLeftPushAsync(RedisKeyBuilder.QueueReadyKey(queueName), entry);
                     }
                 }
+            }
+            catch
+            {
+                // Suppress errors during recovery scan
             }
 
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);

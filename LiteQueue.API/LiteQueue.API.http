@@ -1,6 +1,27 @@
 @LiteQueue.API_HostAddress = http://localhost:5135
 
-GET {{LiteQueue.API_HostAddress}}/weatherforecast/
-Accept: application/json
+### Root
+GET {{LiteQueue.API_HostAddress}}/
 
-###
+### Create Queue
+POST {{LiteQueue.API_HostAddress}}/api/queues/my-queue
+
+### List Queues
+GET {{LiteQueue.API_HostAddress}}/api/queues
+
+### Send Message
+POST {{LiteQueue.API_HostAddress}}/api/queues/my-queue/messages
+Content-Type: application/json
+
+{
+  "body": "Hello, LiteQueue!"
+}
+
+### Receive Messages
+POST {{LiteQueue.API_HostAddress}}/api/queues/my-queue/receive?max=5
+
+### Peek Message
+GET {{LiteQueue.API_HostAddress}}/api/queues/my-queue/peek
+
+### Health Check
+GET {{LiteQueue.API_HostAddress}}/api/health
