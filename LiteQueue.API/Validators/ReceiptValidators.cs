@@ -1,8 +1,9 @@
 using FluentValidation;
+using LiteQueue.Contracts.Messages;
 
 namespace LiteQueue.API.Validators;
 
-public class AcknowledgeRequestValidator : AbstractValidator<Controllers.AcknowledgeRequest>
+public class AcknowledgeRequestValidator : AbstractValidator<AcknowledgeRequest>
 {
     public AcknowledgeRequestValidator()
     {
@@ -11,7 +12,7 @@ public class AcknowledgeRequestValidator : AbstractValidator<Controllers.Acknowl
     }
 }
 
-public class RejectRequestValidator : AbstractValidator<Controllers.RejectRequest>
+public class RejectRequestValidator : AbstractValidator<RejectRequest>
 {
     public RejectRequestValidator()
     {

@@ -24,6 +24,8 @@ public static class RedisKeyBuilder
 
     public static string TopicSubscriptionsKey(string topicName) => $"{Prefix}:topic:{topicName}:subscriptions";
 
+    public static string SubscriptionQueueKey(string topicName, string subscriptionName) => $"{Prefix}:subscription:{topicName}:{subscriptionName}:ready";
+
     public static string SchedulePendingKey() => $"{Prefix}:schedules:pending";
 
     public static string RecurringJobsKey() => $"{Prefix}:recurring";

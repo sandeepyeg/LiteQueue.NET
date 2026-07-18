@@ -1,5 +1,6 @@
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using LiteQueue.API;
 using LiteQueue.API.Validators;
 using LiteQueue.Application.Services;
 using LiteQueue.Background.Services;
@@ -27,11 +28,18 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 });
 
 builder.Services.AddScoped<IQueueRepository, RedisQueueRepository>();
+builder.Services.AddScoped<ISchedulerRepository, RedisSchedulerRepository>();
+builder.Services.AddScoped<ITopicRepository, RedisTopicRepository>();
 builder.Services.AddScoped<QueueService>();
+builder.Services.AddScoped<QueueMonitoringService>();
+builder.Services.AddScoped<SchedulingService>();
+builder.Services.AddScoped<TopicService>();
 builder.Services.AddHostedService<MessageCleaner>();
 
 builder.Services.AddHealthChecks()
     .AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
+
+builder.Services.AddLiteQueueTelemetry();
 
 var app = builder.Build();
 
@@ -48,6 +56,7 @@ app.MapHealthChecks("/api/health/live", new() { Predicate = _ => false });
 app.MapHealthChecks("/api/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
 app.MapHealthChecks("/api/health");
 
+app.UseOpenTelemetryPrometheusScrapingEndpoint();
 app.MapGet("/", () => "LiteQueue API is running.");
 
 app.Run();

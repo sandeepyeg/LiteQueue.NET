@@ -22,6 +22,9 @@ public class QueueService
     public Task<IEnumerable<QueueMessage>> ReceiveMessagesAsync(string queueName, int max, TimeSpan timeout) =>
         _repository.ReceiveMessagesAsync(queueName, max, timeout);
 
+    public Task<IEnumerable<QueueMessage>> ReceiveWithLongPollingAsync(string queueName, int max, TimeSpan visibilityTimeout, TimeSpan longPollTimeout) =>
+        _repository.ReceiveWithLongPollingAsync(queueName, max, visibilityTimeout, longPollTimeout);
+
     public Task AcknowledgeMessageAsync(string queueName, string receiptHandle) =>
         _repository.AcknowledgeMessageAsync(queueName, receiptHandle);
 
@@ -35,4 +38,25 @@ public class QueueService
 
     public Task RedriveDeadLetterMessageAsync(string queueName, string messageId) =>
         _repository.RedriveDeadLetterMessageAsync(queueName, messageId);
+
+    public Task<QueueStats> GetQueueStatisticsAsync(string queueName) =>
+        _repository.GetQueueStatisticsAsync(queueName);
+
+    public Task PurgeQueueAsync(string queueName) =>
+        _repository.PurgeQueueAsync(queueName);
+
+    public Task PauseQueueAsync(string queueName) =>
+        _repository.PauseQueueAsync(queueName);
+
+    public Task ResumeQueueAsync(string queueName) =>
+        _repository.ResumeQueueAsync(queueName);
+
+    public Task<QueueDefinition?> GetQueueConfigurationAsync(string queueName) =>
+        _repository.GetQueueConfigurationAsync(queueName);
+
+    public Task UpdateQueueConfigurationAsync(string queueName, QueueDefinition config) =>
+        _repository.UpdateQueueConfigurationAsync(queueName, config);
+
+    public Task ExtendVisibilityAsync(string queueName, string receiptHandle, TimeSpan visibilityTimeout) =>
+        _repository.ExtendVisibilityAsync(queueName, receiptHandle, visibilityTimeout);
 }

@@ -24,4 +24,19 @@ public class DeadLetterResponse
 
     [JsonPropertyName("deadLetteredAt")]
     public DateTimeOffset DeadLetteredAt { get; set; }
+
+    [JsonPropertyName("failureReason")]
+    public string? FailureReason { get; set; }
+
+    [JsonPropertyName("exceptionSummary")]
+    public string? ExceptionSummary { get; set; }
+
+    [JsonPropertyName("firstFailedAt")]
+    public DateTimeOffset FirstFailedAt { get; set; }
+
+    [JsonPropertyName("lastFailedAt")]
+    public DateTimeOffset LastFailedAt { get; set; }
+
+    [JsonPropertyName("errorMessage")]
+    public string? ErrorMessage { get; set; }
 }

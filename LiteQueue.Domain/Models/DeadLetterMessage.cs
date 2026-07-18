@@ -1,3 +1,5 @@
+using LiteQueue.Domain.Enums;
+
 namespace LiteQueue.Domain.Models;
 
 public class DeadLetterMessage
@@ -9,4 +11,9 @@ public class DeadLetterMessage
     public int DeliveryAttempts { get; set; }
     public string? LastError { get; set; }
     public DateTimeOffset DeadLetteredAt { get; set; } = DateTimeOffset.UtcNow;
+    public DeadLetterReason FailureReason { get; set; }
+    public string? ExceptionSummary { get; set; }
+    public DateTimeOffset FirstFailedAt { get; set; }
+    public DateTimeOffset LastFailedAt { get; set; }
+    public string? ErrorMessage { get; set; }
 }
