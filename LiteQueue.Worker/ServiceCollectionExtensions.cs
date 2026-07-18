@@ -4,6 +4,8 @@ namespace LiteQueue.Worker;
 
 public static class ServiceCollectionExtensions
 {
+    internal static readonly List<Type> RegisteredHandlerTypes = new();
+
     public static IServiceCollection AddLiteQueueWorker(
         this IServiceCollection services,
         Action<LiteQueueWorkerOptions> configureOptions)
@@ -17,6 +19,7 @@ public static class ServiceCollectionExtensions
                 client.BaseAddress = options.BaseAddress;
         });
 
+        services.AddSingleton(RegisteredHandlerTypes);
         services.AddHostedService<LiteQueueWorker>();
 
         return services;
@@ -26,6 +29,7 @@ public static class ServiceCollectionExtensions
         where THandler : class, ILiteQueueHandler<TMessage>
     {
         services.AddScoped<ILiteQueueHandler<TMessage>, THandler>();
+        RegisteredHandlerTypes.Add(typeof(THandler));
         return services;
     }
 }

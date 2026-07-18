@@ -13,6 +13,7 @@ public class LiteQueueWorker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOptions<LiteQueueWorkerOptions> _options;
     private readonly ILogger<LiteQueueWorker> _logger;
+    private readonly List<Type> _knownHandlerTypes;
 
     private sealed record ReceivedMessage(string MessageId, string ReceiptHandle, string Body, int DeliveryCount);
     private sealed record AcknowledgePayload(string ReceiptHandle);
@@ -21,11 +22,13 @@ public class LiteQueueWorker : BackgroundService
     public LiteQueueWorker(
         IServiceScopeFactory scopeFactory,
         IOptions<LiteQueueWorkerOptions> options,
-        ILogger<LiteQueueWorker> logger)
+        ILogger<LiteQueueWorker> logger,
+        List<Type> knownHandlerTypes)
     {
         _scopeFactory = scopeFactory;
         _options = options;
         _logger = logger;
+        _knownHandlerTypes = knownHandlerTypes;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -110,18 +113,18 @@ public class LiteQueueWorker : BackgroundService
         try
         {
             var handlerType = typeof(ILiteQueueHandler<>);
-            var handlerInterface = FindHandlerInterface(handlerType, scope.ServiceProvider);
-            if (handlerInterface == null)
+            var (handlerInterface, handlerImpl) = FindHandler(scope.ServiceProvider);
+            if (handlerInterface == null || handlerImpl == null)
             {
-                _logger.LogWarning("No handler registered for message type enqueue. MessageId: {Id}", message.MessageId);
+                _logger.LogWarning("No handler registered. MessageId: {Id}", message.MessageId);
                 await AcknowledgeAsync(options, message.ReceiptHandle, ct);
                 return;
             }
 
-            var handler = scope.ServiceProvider.GetService(handlerInterface);
+            var handler = scope.ServiceProvider.GetRequiredService(handlerImpl);
             if (handler == null)
             {
-                _logger.LogWarning("Could not resolve handler {HandlerType}", handlerInterface.FullName);
+                _logger.LogWarning("Could not resolve handler {HandlerType}", handlerImpl.FullName);
                 await AcknowledgeAsync(options, message.ReceiptHandle, ct);
                 return;
             }
@@ -164,24 +167,20 @@ public class LiteQueueWorker : BackgroundService
         }
     }
 
-    private static Type? FindHandlerInterface(Type handlerType, IServiceProvider sp)
+    private (Type? interface_, Type? implementation_) FindHandler(IServiceProvider sp)
     {
-        foreach (var service in GetAllRegisteredServices(sp))
+        var handlerOpenType = typeof(ILiteQueueHandler<>);
+        foreach (var implType in _knownHandlerTypes)
         {
-            foreach (var iface in service.GetInterfaces())
+            foreach (var iface in implType.GetInterfaces())
             {
-                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == handlerType)
-                    return iface;
+                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == handlerOpenType)
+                {
+                    return (iface, implType);
+                }
             }
         }
-        return null;
-    }
-
-    private static IEnumerable<Type> GetAllRegisteredServices(IServiceProvider sp)
-    {
-        var scope = sp as IServiceScope;
-        var provider = scope?.ServiceProvider ?? sp;
-        return Enumerable.Empty<Type>();
+        return (null, null);
     }
 
     private async Task AcknowledgeAsync(LiteQueueWorkerOptions options, string receiptHandle, CancellationToken ct)

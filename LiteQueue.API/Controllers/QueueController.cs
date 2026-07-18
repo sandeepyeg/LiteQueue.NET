@@ -11,10 +11,12 @@ namespace LiteQueue.API.Controllers;
 public class QueueController : ControllerBase
 {
     private readonly QueueService _service;
+    private readonly MessageDeduplicationService _deduplication;
 
-    public QueueController(QueueService service)
+    public QueueController(QueueService service, MessageDeduplicationService deduplication)
     {
         _service = service;
+        _deduplication = deduplication;
     }
 
     [HttpPost("{queueName}")]
@@ -32,11 +34,39 @@ public class QueueController : ControllerBase
     }
 
     [HttpPost("{queueName}/messages")]
-    public async Task<IActionResult> SendMessage([FromRoute] string queueName, [FromBody] QueueMessage message)
+    public async Task<IActionResult> SendMessage([FromRoute] string queueName, [FromBody] EnqueueMessageRequest request)
     {
-        message.Id = Guid.NewGuid().ToString();
-        message.CreatedAt = DateTimeOffset.UtcNow;
-        await _service.SendMessageAsync(queueName, message);
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var existingId = await _deduplication.TryDeduplicateAsync(queueName, request.IdempotencyKey);
+            if (existingId != null)
+                return Ok(new { messageId = existingId, deduplicated = true });
+        }
+
+        var message = new QueueMessage
+        {
+            Id = Guid.NewGuid().ToString(),
+            Body = request.Body,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        if (request.DelaySeconds > 0)
+        {
+            await _service.SendMessageWithDelayAsync(queueName, message, TimeSpan.FromSeconds(request.DelaySeconds.Value));
+        }
+        else if (request.AvailableAt.HasValue)
+        {
+            var delay = request.AvailableAt.Value - DateTimeOffset.UtcNow;
+            await _service.SendMessageWithDelayAsync(queueName, message, delay > TimeSpan.Zero ? delay : TimeSpan.Zero);
+        }
+        else
+        {
+            await _service.SendMessageAsync(queueName, message);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            await _deduplication.StoreIdempotencyKeyAsync(queueName, request.IdempotencyKey, message.Id);
+
         return Ok(new { messageId = message.Id });
     }
 
@@ -228,9 +258,8 @@ public class QueueController : ControllerBase
         [FromRoute] string queueName,
         [FromRoute] string messageId)
     {
-        var deadLetters = await _service.GetDeadLetterMessagesAsync(queueName);
-        var matching = deadLetters.Where(d => d.Id == messageId || d.OriginalMessageId == messageId);
-        if (!matching.Any())
+        var deleted = await _service.DeleteDeadLetterMessageAsync(queueName, messageId);
+        if (!deleted)
             return NotFound(new { error = "Dead letter message not found" });
 
         return Ok(new { messageId, status = "deleted" });
@@ -247,6 +276,23 @@ public class QueueController : ControllerBase
             return NotFound(new { error = "Dead letter message not found" });
 
         return Ok(message);
+    }
+
+    [HttpGet("{queueName}/messages")]
+    public async Task<IActionResult> GetMessages(
+        [FromRoute] string queueName,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var stats = await _service.GetQueueStatisticsAsync(queueName);
+        return Ok(new { queueName, stats.ReadyCount, stats.InFlightCount });
+    }
+
+    [HttpGet("{queueName}/inflight")]
+    public async Task<IActionResult> GetInFlightMessages([FromRoute] string queueName)
+    {
+        var stats = await _service.GetQueueStatisticsAsync(queueName);
+        return Ok(new { queueName, inFlightCount = stats.InFlightCount });
     }
 }
 

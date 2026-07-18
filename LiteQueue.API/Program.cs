@@ -1,16 +1,25 @@
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using LiteQueue.API;
+using LiteQueue.API.Auth;
 using LiteQueue.API.Validators;
 using LiteQueue.Application.Services;
 using LiteQueue.Background.Services;
 using LiteQueue.Domain.Interfaces;
 using LiteQueue.Infrastructure.Redis;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<LiteQueue.API.Options.LiteQueueApiOptions>(
+    builder.Configuration.GetSection("LiteQueue:Api"));
+
+builder.Services.AddAuthentication("ApiKey")
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", null);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -34,7 +43,24 @@ builder.Services.AddScoped<QueueService>();
 builder.Services.AddScoped<QueueMonitoringService>();
 builder.Services.AddScoped<SchedulingService>();
 builder.Services.AddScoped<TopicService>();
+builder.Services.AddScoped<MessageDeduplicationService>();
+
 builder.Services.AddHostedService<MessageCleaner>();
+builder.Services.AddHostedService<VisibilityTimeoutWorker>();
+builder.Services.AddHostedService<DelayedMessagePromotionWorker>();
+builder.Services.AddHostedService<RecurringJobScheduler>();
+builder.Services.AddHostedService<DeadLetterRetentionWorker>();
+builder.Services.AddHostedService<ExpiredMessageCleaner>();
+builder.Services.AddHostedService<QueueStatisticsWorker>();
+builder.Services.AddHostedService<OrphanedLeaseRecoveryWorker>();
+
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+    });
+});
 
 builder.Services.AddHealthChecks()
     .AddCheck<RedisHealthCheck>("redis", tags: new[] { "ready" });
@@ -49,7 +75,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.MapHealthChecks("/api/health/live", new() { Predicate = _ => false });

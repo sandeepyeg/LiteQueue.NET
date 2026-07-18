@@ -19,6 +19,9 @@ public class QueueService
     public Task SendMessageAsync(string queueName, QueueMessage message) =>
         _repository.SendMessageAsync(queueName, message);
 
+    public Task SendMessageWithDelayAsync(string queueName, QueueMessage message, TimeSpan delay) =>
+        _repository.SendMessageWithDelayAsync(queueName, message, delay);
+
     public Task<IEnumerable<QueueMessage>> ReceiveMessagesAsync(string queueName, int max, TimeSpan timeout) =>
         _repository.ReceiveMessagesAsync(queueName, max, timeout);
 
@@ -38,6 +41,9 @@ public class QueueService
 
     public Task RedriveDeadLetterMessageAsync(string queueName, string messageId) =>
         _repository.RedriveDeadLetterMessageAsync(queueName, messageId);
+
+    public Task<bool> DeleteDeadLetterMessageAsync(string queueName, string messageId) =>
+        _repository.DeleteDeadLetterMessageAsync(queueName, messageId);
 
     public Task<QueueStats> GetQueueStatisticsAsync(string queueName) =>
         _repository.GetQueueStatisticsAsync(queueName);

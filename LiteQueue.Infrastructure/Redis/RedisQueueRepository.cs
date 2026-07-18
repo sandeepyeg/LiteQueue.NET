@@ -218,6 +218,53 @@ public class RedisQueueRepository : IQueueRepository
         }
     }
 
+    public async Task<bool> DeleteDeadLetterMessageAsync(string queueName, string messageId)
+    {
+        var deadKey = RedisKeyBuilder.DeadLetterKey(queueName);
+        var deadMessages = await _db.ListRangeAsync(deadKey);
+
+        foreach (var item in deadMessages)
+        {
+            var deadMsg = JsonSerializer.Deserialize<DeadLetterMessage>(item!.ToString());
+            if (deadMsg?.Id == messageId || deadMsg?.OriginalMessageId == messageId)
+            {
+                await _db.ListRemoveAsync(deadKey, item);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public async Task<string?> GetDeduplicationMessageIdAsync(string queueName, string idempotencyKey)
+    {
+        var dedupeKey = RedisKeyBuilder.DedupeKey(queueName, idempotencyKey);
+        var value = await _db.StringGetAsync(dedupeKey);
+        return value.HasValue ? value.ToString() : null;
+    }
+
+    public async Task StoreDeduplicationKeyAsync(string queueName, string idempotencyKey, string messageId)
+    {
+        var dedupeKey = RedisKeyBuilder.DedupeKey(queueName, idempotencyKey);
+        await _db.StringSetAsync(dedupeKey, messageId, TimeSpan.FromHours(24));
+    }
+
+    public async Task SendMessageWithDelayAsync(string queueName, QueueMessage message, TimeSpan delay)
+    {
+        await CreateQueueAsync(queueName);
+        var json = JsonSerializer.Serialize(message);
+        await _db.StringSetAsync(RedisKeyBuilder.MessageKey(message.Id), json);
+
+        if (delay > TimeSpan.Zero)
+        {
+            var score = DateTimeOffset.UtcNow.Add(delay).ToUnixTimeSeconds();
+            await _db.SortedSetAddAsync(RedisKeyBuilder.QueueDelayedKey(queueName), message.Id, score);
+        }
+        else
+        {
+            await _db.ListLeftPushAsync(RedisKeyBuilder.QueueReadyKey(queueName), message.Id);
+        }
+    }
+
     public async Task<QueueStats> GetQueueStatisticsAsync(string queueName)
     {
         var readyCount = await _db.ListLengthAsync(RedisKeyBuilder.QueueReadyKey(queueName));
